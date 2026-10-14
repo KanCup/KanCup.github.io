@@ -222,7 +222,7 @@
           <p>Kazhdan–Lusztig polynomials on special Bruhat intervals, through the combinatorial invariance conjecture.</p>
           <dl class="pairs small">
             <dt>Mentor</dt>
-            <dd>Grant Barkley, Harvard</dd>
+            <dd>Grant Barkley, University of Michigan</dd>
             <dt>Preliminary result</dt>
             <dd>A relation between Kazhdan–Lusztig <span style="white-space: nowrap">R-polynomials</span> and quivers</dd>
           </dl>
@@ -231,7 +231,7 @@
           <p>Polynomiality and positivity of composition Kostka functions.</p>
           <dl class="pairs small">
             <dt>Mentor</dt>
-            <dd>Siddhartha Sahi, Rutgers</dd>
+            <dd>Siddhartha Sahi, Rutgers University</dd>
             <dt>Preliminary result</dt>
             <dd>A proof of polynomiality</dd>
           </dl>
@@ -255,7 +255,7 @@
 
     <footer class="row foot">
       <p class="label">Updated Oct 2026</p>
-      <p class="text">The pigs are Google's Noto emoji. <span id="pig-hint">Some of them move when you hover over them.</span></p>
+      <p class="text">The pigs are Google's Noto emoji. <span id="pig-hint">The ones on the right move when you hover over them.</span></p>
     </footer>
   </main>
 </div>
@@ -274,7 +274,12 @@
     hang:   { src: 'assets/hang.webp',   l: -0.1906, t: -0.4606, w: 1.3213, ms: 3000, cls: 'fade-top' },
     record: { src: 'assets/record.webp', l: -0.0335, t: -0.0815, w: 1.0683, ms: 720 },
     jump:   { src: 'assets/jump.webp',   l: -2.817,  t: -1.1857, w: 3.8639, ms: 1840, once: true },
-    pixel:  { src: 'assets/pixel.webp',  l: -0.0783, t: -0.0996, w: 1.2525, ms: 800, cls: 'px' }
+    pixel:  { src: 'assets/pixel.webp',  l: -0.0783, t: -0.0996, w: 1.2525, ms: 800, cls: 'px' },
+    tongue: { src: 'assets/tongue.webp', l: -0.0431, t: -0.0225, w: 1.0918, ms: 6080 },
+    mosaic: { src: 'assets/mosaic.webp', l: -0.011,  t: -0.008,  w: 1.022,  ms: 1140 },
+    nopig:  { src: 'assets/nopig.webp',  l:  0.03,   t: -0.0282, w: 0.9952, ms: 800, cls: 'px' },
+    turn:   { src: 'assets/turn.webp',   l: -0.0149, t: -0.0859, w: 1.0042, ms: 2700 },
+    grumpy: { src: 'assets/grumpy.webp', l: -0.0918, t:  0.0354, w: 1.2558, ms: 8280 }
   };
   const KEYS = Object.keys(ANIMS);
   const field = document.getElementById('pigfield');
@@ -328,19 +333,11 @@
     return pts;
   }
 
-  // hands out animation names evenly, in shuffled rounds
-  function shuffledBag() {
-    let bag = [];
-    return () => {
-      if (!bag.length) {
-        bag = KEYS.slice();
-        for (let i = bag.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [bag[i], bag[j]] = [bag[j], bag[i]];
-        }
-      }
-      return bag.pop();
-    };
+  // a random animation each time, never the same one twice in a row on the same pig
+  function pickAnim(st) {
+    let k;
+    do { k = KEYS[Math.floor(Math.random() * KEYS.length)]; } while (KEYS.length > 1 && k === st.key);
+    return k;
   }
 
   function start(el) {
@@ -350,30 +347,33 @@
     if (st.on) return;
     st.on = true;
     st.t0 = 0;
-    const A = ANIMS[el.dataset.anim];
+    st.key = pickAnim(st);
+    const A = ANIMS[st.key];
     let img = el.querySelector('img.anim');
     if (!img) {
       img = new Image();
-      img.className = 'anim' + (A.cls ? ' ' + A.cls : '');
       img.alt = '';
       img.draggable = false;
-      img.style.left = `calc(var(--pw) * ${A.l})`;
-      img.style.top = `calc(var(--pw) * ${A.t})`;
-      img.style.width = `calc(var(--pw) * ${A.w})`;
       el.appendChild(img);
     }
-    getBlob(el.dataset.anim).then(blob => {
+    img.className = 'anim' + (A.cls ? ' ' + A.cls : '');
+    img.style.left = `calc(var(--pw) * ${A.l})`;
+    img.style.top = `calc(var(--pw) * ${A.t})`;
+    img.style.width = `calc(var(--pw) * ${A.w})`;
+    getBlob(st.key).then(blob => {
       if (!st.on) return;
       // a fresh URL makes the animation restart from its first frame
       const url = blob ? URL.createObjectURL(blob) : A.src + '?play=' + (++bust);
       st.url = blob ? url : null;
       img.src = url;
-      return (img.decode ? img.decode() : Promise.resolve()).catch(() => {}).then(() => {
+      const show = () => {
         if (!st.on) return;
+        if (!(img.complete && img.naturalWidth > 0)) { stop(el); return; }   // file missing: keep the still pig
         st.t0 = performance.now();
         el.classList.add('playing');
         if (st.pendingFinish) finish(el);
-      });
+      };
+      return (img.decode ? img.decode() : Promise.resolve()).then(show, show);
     });
   }
 
@@ -383,7 +383,7 @@
     if (!st || !st.on) return;
     if (!st.t0) { st.pendingFinish = true; return; }
     st.pendingFinish = false;
-    const A = ANIMS[el.dataset.anim];
+    const A = ANIMS[st.key];
     const t = performance.now() - st.t0;
     const wait = A.once ? Math.max(0, A.ms - t) + 900 : A.ms - (t % A.ms);
     clearTimeout(st.stopTimer);
@@ -434,9 +434,7 @@
     built = { w: W, h: H, wide: isWide };
     const ph = pw * ASPECT;
     const pts = poisson(-pw * 0.3, -ph * 0.3, W + pw * 0.3, H + ph * 0.3, pw * 1.7);
-    const next = shuffledBag();
     const frag = document.createDocumentFragment();
-    const movers = [];
     for (const [x, y] of pts) {
       const size = Math.round(pw * (0.9 + Math.random() * 0.2));
       const el = document.createElement('div');
@@ -453,15 +451,19 @@
       img.draggable = false;
       img.src = STILL;
       el.appendChild(img);
-      if (!live(x, y)) el.classList.add('faint');
-      else if (Math.random() < 0.4) movers.push(el);
+      if (live(x, y)) wire(el); else el.classList.add('faint');
       frag.appendChild(el);
     }
-    for (const el of movers) {
-      el.dataset.anim = next();
-      wire(el);
-    }
     field.appendChild(frag);
+    updateHint();
+  }
+
+  function updateHint() {
+    const hint = document.getElementById('pig-hint');
+    if (!hint) return;
+    const where = wide.matches ? 'on the right' : 'at the top';
+    const how = calm.matches ? 'click' : fine.matches ? 'hover over' : 'tap';
+    hint.textContent = `The ones ${where} move when you ${how} them.`;
   }
 
   build();
@@ -476,13 +478,6 @@
   };
   addEventListener('resize', maybeRebuild);
   if ('ResizeObserver' in window) new ResizeObserver(maybeRebuild).observe(field);
-
-  const hint = document.getElementById('pig-hint');
-  if (hint) {
-    hint.textContent = calm.matches ? 'Some of them move when you click them.'
-      : fine.matches ? 'Some of them move when you hover over them.'
-      : 'Some of them move when you tap them.';
-  }
 
   // on mouse devices, fetch the animations once the page is idle so hovers start instantly
   if (fine.matches) {
