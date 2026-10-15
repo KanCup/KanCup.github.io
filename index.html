@@ -67,7 +67,8 @@
     -webkit-touch-callout: none;
     -webkit-tap-highlight-color: transparent;
   }
-  .pig.faint { opacity: var(--faint); pointer-events: none; }
+  .pig.faint { opacity: calc(var(--faint) * var(--o, 1)); pointer-events: none; }
+  .pig.sticker .still { object-fit: contain; }
   .pig img {
     display: block;
     max-width: none;
@@ -147,6 +148,10 @@
   .pairs dt { font-weight: 700; }
   .pairs dd { margin: 0; min-width: 0; }
   .pairs.small dt { font-size: var(--small); color: var(--muted); }
+  .pairs.aligned { grid-template-columns: 6rem minmax(0, 1fr); }
+  .pairs .yr { font-variant-numeric: tabular-nums; }
+  .lines { list-style: none; margin: 0; padding: 0; }
+  .lines li + li { margin-top: 6px; }      /* so a wrapped line does not read as a new item */
 
   .problems { list-style: none; margin: 0; padding: 0; counter-reset: problem; gap: 22px; }
   .problems li {
@@ -189,6 +194,7 @@
   @media (max-width: 480px) {
     .pairs.small { grid-template-columns: minmax(0, 1fr); row-gap: 0; }
     .pairs.small dd + dt { margin-top: 6px; }
+    .pairs.stack { grid-template-columns: minmax(0, 1fr); row-gap: 2px; }
   }
 </style>
 </head>
@@ -205,12 +211,25 @@
     <section class="row" id="about" aria-labelledby="about-h">
       <h2 class="label" id="about-h">About</h2>
       <div class="text">
-        <p>I am a mathematics honors undergraduate at Rutgers University, graduating in May 2027. I transferred to Rutgers in 2025 from Ocean University of China.</p>
-        <p>I work on the combinatorics around Coxeter groups and Hecke algebras, and on Macdonald-type polynomials. I also formalize mathematics in Lean&nbsp;4 and contribute to Mathlib.</p>
-        <p>I am applying to graduate programs for 2027.</p>
-        <dl class="pairs">
+        <p>I am a mathematics honors undergraduate at Rutgers University, graduating in May 2027. I am applying to graduate programs for 2027.</p>
+        <dl class="pairs aligned">
+          <dt class="yr">2023–2024</dt>
+          <dd>Ocean University of China</dd>
+          <dt class="yr">2024–2025</dt>
+          <dd>Xiamen University (exchange)</dd>
+          <dt class="yr">2025–2027</dt>
+          <dd>Rutgers University</dd>
+        </dl>
+        <p>I like algebraic combinatorics, and using combinatorial methods to study algebraic geometry and representation theory.</p>
+        <dl class="pairs aligned stack">
           <dt>Interests</dt>
-          <dd>Algebraic Combinatorics,Algebraic Geometry, Representation theory.</dd>
+          <dd>
+            <ul class="lines">
+              <li>Hecke algebras and the polynomials attached to them</li>
+              <li>Kazhdan–Lusztig polynomials and their connections to flag varieties and quivers</li>
+              <li>Geometric representation theory</li>
+            </ul>
+          </dd>
         </dl>
       </div>
     </section>
@@ -282,6 +301,44 @@
     grumpy: { src: 'assets/grumpy.webp', l: -0.0918, t:  0.0354, w: 1.2558, ms: 8280 }
   };
   const KEYS = Object.keys(ANIMS);
+
+  // Still stickers for the faded pigs behind the type, half and half with plain pigs.
+  // w = width in pig widths, a = height / width, o = extra fading for the darker pictures.
+  const STICKERS = {
+    cry:     { src: 'assets/s-cry.webp',     w: 1.2,  a: 0.8812 },
+    dead:    { src: 'assets/s-dead.webp',    w: 1.2,  a: 0.825 },
+    space:   { src: 'assets/s-space.webp',   w: 1.5,  a: 0.9938, o: 0.75 },
+    rainbow: { src: 'assets/s-rainbow.webp', w: 1.15, a: 0.8812 },
+    drain1:  { src: 'assets/s-drain1.webp',  w: 1.45, a: 0.8781, o: 0.85 },
+    drain2:  { src: 'assets/s-drain2.webp',  w: 1.45, a: 0.9406, o: 0.85 },
+    fish:    { src: 'assets/s-fish.webp',    w: 2.0,  a: 0.5219, o: 0.85 },
+    para:    { src: 'assets/s-para.webp',    w: 1.3,  a: 1 },
+    flat:    { src: 'assets/s-flat.webp',    w: 1.5,  a: 0.4 }
+  };
+  const SKEYS = Object.keys(STICKERS);
+  let deck = [], placed = [];
+
+  function shuffle(a) {
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
+
+  // Deal from a shuffled deck (every sticker once, plus as many plain pigs) so all of them turn up;
+  // skip a card whose twin is already close by. null means a plain pig.
+  function drawSticker(x, y, near) {
+    if (!deck.length) deck = shuffle([...SKEYS, ...SKEYS.map(() => null)]);
+    for (let i = deck.length - 1; i >= 0; i--) {
+      const k = deck[i];
+      if (k && placed.some(p => p.k === k && Math.hypot(p.x - x, p.y - y) < near)) continue;
+      deck.splice(i, 1);
+      if (k) placed.push({ k, x, y });
+      return k;
+    }
+    return null;
+  }
   const field = document.getElementById('pigfield');
   const grid = document.querySelector('.grid');
   const wide = matchMedia('(min-width: 1100px)');
@@ -435,23 +492,38 @@
     const ph = pw * ASPECT;
     const pts = poisson(-pw * 0.3, -ph * 0.3, W + pw * 0.3, H + ph * 0.3, pw * 1.7);
     const frag = document.createDocumentFragment();
+    deck = [];
+    placed = [];
     for (const [x, y] of pts) {
       const size = Math.round(pw * (0.9 + Math.random() * 0.2));
+      const isLive = live(x, y);
+      const key = isLive ? null : drawSticker(x, y, pw * 4.2);
+      const S = key ? STICKERS[key] : null;
+      const w = S ? size * S.w : size;
+      const h = S ? w * S.a : size * ASPECT;
       const el = document.createElement('div');
       el.className = 'pig';
-      el.style.left = (x - size / 2).toFixed(1) + 'px';
-      el.style.top = (y - size * ASPECT / 2).toFixed(1) + 'px';
+      el.style.left = (x - w / 2).toFixed(1) + 'px';
+      el.style.top = (y - h / 2).toFixed(1) + 'px';
       el.style.setProperty('--pw', size + 'px');
       el.style.setProperty('--rot', ((Math.random() - 0.5) * 14).toFixed(1) + 'deg');
-      el.style.setProperty('--flip', Math.random() < 0.5 ? '-1' : '1');
+      // stickers keep their original orientation; plain pigs face either way
+      el.style.setProperty('--flip', !S && Math.random() < 0.5 ? '-1' : '1');
+      if (S) {
+        el.classList.add('sticker');
+        el.style.width = w.toFixed(1) + 'px';
+        el.style.height = h.toFixed(1) + 'px';
+        if (S.o) el.style.setProperty('--o', S.o);
+      }
       const img = new Image();
       img.className = 'still';
       img.alt = '';
       img.decoding = 'async';
       img.draggable = false;
-      img.src = STILL;
+      if (!isLive) img.loading = 'lazy';
+      img.src = S ? S.src : STILL;
       el.appendChild(img);
-      if (live(x, y)) wire(el); else el.classList.add('faint');
+      if (isLive) wire(el); else el.classList.add('faint');
       frag.appendChild(el);
     }
     field.appendChild(frag);
